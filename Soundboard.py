@@ -3,6 +3,7 @@ import os
 import logging
 import sys
 import pygame
+from EventHandler import EventHandler
 
 
 class Soundboard(object):
@@ -11,11 +12,10 @@ class Soundboard(object):
     __current_profile = None
 
     def __init__(self, profiles_folder: str):
-        self.config = config
         self.__load_profiles(profiles_folder)
         self.__load_soundboard(self.__profiles)
 
-        if self.__current_profile == None:
+        if self.__current_profile is None:
             raise FileNotFoundError("The soundboard cannot work without profiles")
 
     def __load_profiles(self, profiles_folder: str):
@@ -39,10 +39,9 @@ class Soundboard(object):
         The number of the sound is the key that has to be pressed to play it.
         """
         self.__sounds = dict()
-        pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
+        pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=1024)
         pygame.init()
         pygame.display.set_mode((100, 100))
-        pygame.mixer.init()
 
         for folder in profile_list:
             profile_number = int(os.path.split(folder)[1])
@@ -63,13 +62,13 @@ class Soundboard(object):
         """
         Starts using the profile number passed.
         """
-        if not profile_number in self.__sounds.keys():
-            logging.debug("The profile number %d is not available" % (profile_number))
+        if profile_number not in self.__sounds.keys():
+            logging.debug("The profile number %d is not available" % profile_number)
             return
 
         self.__current_profile = profile_number
 
-        logging.debug("Using profile number %d" % (profile_number))
+        logging.debug("Using profile number %d" % profile_number)
 
     def play(self, sound_key: int, loop: bool):
         """
@@ -95,22 +94,21 @@ class Soundboard(object):
         """
         Close the soundboard application
         """
-        logging.debug("Exiting application")
+        logging.debug("Closing application")
         pygame.quit()
         sys.exit(0)
 
 
-if __name__ == "__main__":
+def main():
     logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
-    config = list()
-    config_path = os.path.join(os.path.dirname(__file__), "config.yml")
+    current_dir = os.path.dirname(__file__)
+    config = dict()
+    config_path = os.path.join(current_dir, "config.yml")
 
     with open(config_path, "r") as stream:
         config = yaml.safe_load(stream)
 
-    profiles_dir = os.path.join(os.path.dirname(__file__), config['profiles_folder'])
-
-    soundboard = Soundboard(profiles_dir)
+    profiles_dir = os.path.join(current_dir, config['profiles_folder'])
 
     file_map = {
         pygame.K_KP0: 0,
@@ -125,46 +123,12 @@ if __name__ == "__main__":
         pygame.K_KP9: 9,
     }
 
-    multiply_modifier = False
-    pressed_stop = False
-    key_down_time = 0
-    key_up_time = 0
-    current_profile = 1
+    soundboard = Soundboard(profiles_dir)
+    event_handler = EventHandler(soundboard, file_map)
 
     while True:
-        eventList = pygame.event.get()
+        event_handler.handle(pygame.event.get())
 
-        for event in eventList:
-            if event.type == pygame.KEYDOWN:
-                key_down_time = pygame.time.get_ticks()
-                if event.key == pygame.K_ESCAPE:
-                    soundboard.close()
-                elif event.key == pygame.K_KP_DIVIDE:
-                    profile_modifier = True
-                elif event.key == pygame.K_KP_MULTIPLY:
-                    multiply_modifier = True
-                elif event.key == pygame.K_KP_PERIOD:
-                    pressed_stop = True
-            elif event.type == pygame.KEYUP:
-                key_up_time = pygame.time.get_ticks()
-                if event.key == pygame.K_KP_PERIOD:
-                    pressed_stop = False
-                elif event.key == pygame.K_KP_MULTIPLY:
-                    multiply_modifier = False
-                elif event.key == pygame.K_KP_DIVIDE:
-                    profile_modifier = False
 
-                # if holding key 1 second or more
-                if key_up_time - key_down_time >= 1000:
-                    if event.key in file_map:
-                        soundboard.use_profile(file_map[event.key])
-                elif event.key in file_map:
-                    if multiply_modifier:
-                        soundboard.play(file_map[event.key], loop=True)
-                    else:
-                        soundboard.play(file_map[event.key], loop=False)
-            elif event.type == pygame.QUIT:
-                soundboard.close()
-
-            if multiply_modifier and pressed_stop:
-                soundboard.stop_all_sounds()
+if __name__ == "__main__":
+    main()
